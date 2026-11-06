@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+case "$1" in
+  configure)
+    if [ -x /usr/bin/uicache ] && [ -x /bin/su ]; then
+      /bin/su mobile -c /usr/bin/uicache >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+exit 0

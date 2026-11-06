@@ -1,0 +1,10 @@
+name: Parser regression tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  parser:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/test-parser.sh
