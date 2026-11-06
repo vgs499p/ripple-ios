@@ -9,6 +9,7 @@
 @property(nonatomic,strong) UILabel *time;
 @property(nonatomic,strong) UILabel *body;
 @property(nonatomic,strong) UIButton *photo;
+@property(nonatomic,strong) UIButton *profileButton;
 @property(nonatomic,strong) NSArray *actions;
 + (CGFloat)height:(NSDictionary *)post width:(CGFloat)width;
 - (void)configure:(NSDictionary *)post feed:(RPFeed *)feed;

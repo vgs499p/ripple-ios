@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.6 — 2026-11-06
+
+- Add persisted accent choices: Ripple Red, Breeze Orange, Leaf Green, Rose Pink,
+  Nord Blue, Amethyst and Graphite.
+- Add native profile pages with banners, avatars, biographies and account counts.
+- Upgrade Ripple's same-host legacy HTTP profile redirects to HTTPS before
+  attaching session cookies.
+
+## 0.1.4 — 2026-11-06
+
+- Save sign-in sessions in Keychain and restore them on launch.
+- Keep passwords out of saved data and honor cookie expiry and path scope.
+- Preserve rotated cookies and clear saved sign-in when signing out.
+- Ignore responses from the previous session after sign-out.
+- Add a dedicated Keychain access group for the jailbreak-signed app.
+
+
 ## 0.1.3 — 2026-11-06
 
 First separately published legacy iOS development build.

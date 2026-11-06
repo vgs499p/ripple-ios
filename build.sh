@@ -8,16 +8,16 @@ OUT=$(CDPATH= cd -- "$OUT" && pwd)
 APP="$OUT/Ripple.app"
 rm -rf "$APP"
 mkdir -p "$APP"
-for SOURCE in main RPClient RPImages RPPostCell RPScreens RPSettings RPAlerts; do
+for SOURCE in main RPClient RPSession RPImages RPPostCell RPScreens RPSettings RPAlerts; do
   xcrun clang -target armv7-apple-ios6.0 -marm -miphoneos-version-min=6.0 -isysroot "$IOS_SDK" \
     ${IOS_EXTRA_CFLAGS:-} -fobjc-arc -fblocks -Os -Wall -Wextra -Wno-unused-parameter -I"$IOS_SDK/usr/include/libxml2" \
     -c "$HERE/Sources/$SOURCE.m" -o "$OUT/$SOURCE.o"
 done
 xcrun clang -target armv7-apple-ios6.0 -marm -miphoneos-version-min=6.0 -isysroot "$IOS_SDK" \
-  "$OUT/main.o" "$OUT/RPClient.o" "$OUT/RPImages.o" "$OUT/RPPostCell.o" "$OUT/RPScreens.o" "$OUT/RPSettings.o" "$OUT/RPAlerts.o" -framework UIKit -framework Foundation -framework CFNetwork -framework CoreGraphics -framework QuartzCore -framework ImageIO -lobjc -lxml2 -Wl,-no_data_const -Wl,-no_fixup_chains -o "$APP/RippleLegacy"
+  "$OUT/main.o" "$OUT/RPClient.o" "$OUT/RPSession.o" "$OUT/RPImages.o" "$OUT/RPPostCell.o" "$OUT/RPScreens.o" "$OUT/RPSettings.o" "$OUT/RPAlerts.o" -framework UIKit -framework Foundation -framework CFNetwork -framework Security -framework CoreGraphics -framework QuartzCore -framework ImageIO -lobjc -lxml2 -Wl,-no_data_const -Wl,-no_fixup_chains -o "$APP/RippleLegacy"
 
 cp "$HERE/Resources/"* "$APP/"
-ldid -S -Hsha1 "$APP/RippleLegacy"
+ldid -S"$HERE/Resources/Entitlements.plist" -Hsha1 "$APP/RippleLegacy"
 STAGE=$(mktemp -d "$OUT/.ipa-stage.XXXXXX")
 trap 'rm -rf "$STAGE"' EXIT HUP INT TERM
 mkdir -p "$STAGE/Payload"

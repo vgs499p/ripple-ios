@@ -4,7 +4,7 @@ An unofficial native client for [Ripple](https://ripple.tel/), built with UIKit
 for jailbroken iOS devices. It connects directly to Ripple over HTTPS, without
 an intermediary server or a public API.
 
-**Development build 0.1.3** — tested on an iPhone 5 running iOS 6.1.4. This is a
+**Development build 0.1.6** — tested on an iPhone 5 running iOS 6.1.4. This is a
 32-bit armv7 app and requires iOS 6–10 with 32-bit app support. Other devices and
 OS versions have not been verified.
 
@@ -27,6 +27,7 @@ Search for **Ripple** (package `tel.ripple.native.ios6`).
 ## Current state
 
 - Public and following timelines, Older/Newer pagination, search and a user directory.
+- Native profile pages with profile banners, avatars, biographies and account counts.
 - Native sign-in, conversations, text posts, replies, quotes, likes and reposts.
 - Photo viewing and foreground notification polling.
 - Options for alerts about people you follow or every public post.
@@ -36,10 +37,16 @@ The remaining flows have not all been tested end to end. Photo uploads, full
 profile customization and the optional background notification helper are still
 in progress. **Alerts currently require Ripple to remain open.**
 
-Passwords and session cookies stay in memory, and quitting the process clears
-the session. Failure diagnostics contain response codes, cookie counts and page
+Sign-in sessions are saved in the device Keychain and restored across restarts.
+Sign out deletes the saved session. Your password is never stored. Ripple can
+still expire or revoke a session; the client does not bypass server expiry. Failure diagnostics contain response codes, cookie counts and page
 markers, never passwords or cookie values. Development screenshots are enabled
 only by the optional `RIPPLE_DEVICE_TEST` compile flag.
+
+Requests identify this client as `RippleNative-iOS/0.1.6 (iPhone; iOS <runtime-version>; armv7)`.
+The version is read from iOS at runtime. The Ripple server controls how that
+value is labeled in its Sessions page; older sessions keep the user-agent value
+recorded when they were created.
 
 ## Build
 
@@ -63,7 +70,11 @@ Run parser regression tests on macOS:
 sh scripts/test-parser.sh
 ```
 
-The tests cover login form discovery, empty action resolution, submit/hidden
+`Tests/session-test.m` uses a dedicated synthetic Keychain item to check save,
+restore in a new process, cookie rotation, path scoping, and sign-out cleanup.
+It never uses or displays a real account session.
+
+The parser tests cover login form discovery, empty action resolution, submit/hidden
 fields, account recognition, trusted HTTPS destinations, text and pagination.
 `Tests/network-probe.m` can check login-page discovery on a device without
 submitting credentials.

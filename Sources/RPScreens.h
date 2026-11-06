@@ -3,6 +3,7 @@
 #import "RPClient.h"
 RPClient *RPSharedClient(void);
 UIColor *RPAccent(void);
+NSArray *RPAccentNames(void);
 void RPMessage(NSString *,NSString *);
 void RPEvent(NSString *);
 @interface RPFeed : UITableViewController <UIActionSheetDelegate,UIAlertViewDelegate>
@@ -13,6 +14,14 @@ void RPEvent(NSString *);
 @property(nonatomic) NSInteger number;
 @property(nonatomic) BOOL loading;
 @property(nonatomic) BOOL directory;
+@property(nonatomic) BOOL profileRoute;
+@property(nonatomic,strong) NSDictionary *profile;
+@property(nonatomic,strong) UIImageView *profileBanner;
+@property(nonatomic,strong) UIImageView *profileAvatar;
+@property(nonatomic,strong) UILabel *profileTitle;
+@property(nonatomic,strong) UILabel *profileSubtitle;
+@property(nonatomic,strong) UILabel *profileBio;
+@property(nonatomic,strong) UILabel *profileStats;
 @property(nonatomic,copy) NSString *selectedID;
 @property(nonatomic,strong) UILabel *status;
 @property(nonatomic,strong) UIButton *older;
@@ -20,6 +29,7 @@ void RPEvent(NSString *);
 - (void)load:(NSInteger)number;
 - (void)refresh;
 - (void)postAction:(NSString *)action post:(NSDictionary *)post;
+- (void)applyAccent;
 @end
 @interface RPLogin : UIViewController <UITextFieldDelegate>
 @property(nonatomic,strong) UITextField *username;
@@ -37,5 +47,5 @@ void RPEvent(NSString *);
 @interface RPPhoto : UIViewController
 @property(nonatomic,copy) NSString *url;
 @end
-@interface RPSettings : UITableViewController
+@interface RPSettings : UITableViewController <UIActionSheetDelegate>
 @end

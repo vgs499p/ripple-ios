@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #import "RPClient.h"
+#import "RPSession.h"
 #import <libxml/HTMLparser.h>
 #import <libxml/xpath.h>
 static NSError *RPError(NSString *text) { return [NSError errorWithDomain:@"Ripple" code:1 userInfo:@{NSLocalizedDescriptionKey:text}]; }
-static BOOL trusted(NSURL *url) { return [[url scheme] isEqual:@"https"] && [[url host] isEqual:@"ripple.tel"] && (![url port] || [[url port] intValue]==443) && ![url user] && ![url password]; }
+static NSString *cookieKey(NSHTTPCookie *cookie){return [NSString stringWithFormat:@"%@|%@|%@",cookie.domain,cookie.path,cookie.name];}
+static BOOL trusted(NSURL *url) { return [[url.scheme lowercaseString] isEqual:@"https"] && [[url.host lowercaseString] isEqual:@"ripple.tel"] && (!url.port || url.port.integerValue==443) && !url.user && !url.password; }
+static NSString *nativeUserAgent(void){static NSString *value;static dispatch_once_t once;dispatch_once(&once,^{NSString *version=[[NSProcessInfo processInfo] operatingSystemVersionString]?:@"unknown";version=[[version componentsSeparatedByCharactersInSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789."] invertedSet]] componentsJoinedByString:@""];value=[NSString stringWithFormat:@"RippleNative-iOS/0.1.6 (iPhone; iOS %@; armv7)",version.length?version:@"unknown"];});return value;}
 @interface RPClient (Cookies)
 - (void)receive:(NSHTTPURLResponse *)response;
 - (NSURLRequest *)withCookies:(NSURLRequest *)request;
@@ -11,7 +14,24 @@ static BOOL trusted(NSURL *url) { return [[url scheme] isEqual:@"https"] && [[ur
 @implementation RPRequest
 - (void)finish:(NSError *)error { RPCompletion done=self.completion;self.completion=nil;[self.connection cancel];self.connection=nil; if(done)dispatch_async(dispatch_get_main_queue(),^{done(error?nil:self.body,self.response,error);}); }
 - (NSURLRequest *)connection:(NSURLConnection *)c willSendRequest:(NSURLRequest *)request redirectResponse:(NSURLResponse *)response {
-    if(!trusted(request.URL)){[self finish:RPError(@"Ripple redirected outside its HTTPS address.")];return nil;}if(response)[self.client receive:(NSHTTPURLResponse *)response];return [self.client withCookies:request];
+    if(self.sessionGeneration!=self.client.sessionGeneration){[self finish:RPError(@"Your sign-in changed. Refresh to continue.")];return nil;}
+    if(!trusted(request.URL)){
+        NSString *scheme=request.URL.scheme?:@"unknown",*host=request.URL.host?:@"unknown",*path=request.URL.path?:@"/";
+        // Ripple's legacy profile aliases redirect /~handle to plain HTTP on
+        // the same host. Upgrade that exact redirect before forwarding any
+        // cookies; never accept cookies from the HTTP response itself.
+        BOOL sameRippleHost=[[host lowercaseString] isEqual:@"ripple.tel"];
+        BOOL plainHTTP=[[scheme lowercaseString] isEqual:@"http"]&&(!request.URL.port||request.URL.port.integerValue==80);
+        if(sameRippleHost&&plainHTTP&&!request.URL.user&&!request.URL.password){
+            NSString *destination=[NSString stringWithFormat:@"https://ripple.tel%@%@",path,request.URL.query.length?[NSString stringWithFormat:@"?%@",request.URL.query]:@""];
+            NSMutableURLRequest *secure=[request mutableCopy];secure.URL=[NSURL URLWithString:destination];[secure setValue:nil forHTTPHeaderField:@"Cookie"];
+            if(trusted(secure.URL))return [self.client withCookies:secure];
+        }
+        if(response){NSMutableDictionary *entry=[@{@"path":response.URL.path?:@"",@"status":@([(NSHTTPURLResponse *)response statusCode]),@"receivedCookieCount":@0,@"storedCookieCount":@(self.client.cookies.count)}mutableCopy];entry[@"blockedRedirect"]=[NSString stringWithFormat:@"%@://%@%@",scheme,host,path];[self.client.requestSummary addObject:entry];if(self.client.requestSummary.count>12)[self.client.requestSummary removeObjectAtIndex:0];}
+        NSString *port=request.URL.port?[@":" stringByAppendingString:[request.URL.port stringValue]]:@"";
+        [self finish:RPError([NSString stringWithFormat:@"Ripple redirected to %@://%@%@%@, outside the approved HTTPS address.",scheme,host,port,path])];return nil;
+    }
+    if(response)[self.client receive:(NSHTTPURLResponse *)response];return [self.client withCookies:request];
 }
 - (void)connection:(NSURLConnection *)c didReceiveResponse:(NSURLResponse *)r {self.response=(NSHTTPURLResponse *)r;self.body=[NSMutableData data];}
 - (void)connection:(NSURLConnection *)c didReceiveData:(NSData *)d {if(self.body.length+d.length>4*1024*1024){[self finish:RPError(@"Response is too large.")];return;}[self.body appendData:d];}
@@ -27,11 +47,13 @@ static BOOL trusted(NSURL *url) { return [[url scheme] isEqual:@"https"] && [[ur
     NSURL *url=[NSURL URLWithString:path relativeToURL:[NSURL URLWithString:@"https://ripple.tel/"]];
     if(!trusted(url)){completion(nil,nil,RPError(@"Unsupported Ripple address."));return;}
     NSMutableURLRequest *r=[NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:20];
-    r.HTTPShouldHandleCookies=NO;[r setValue:@"RippleNative-iOS/0.1 (iOS 6; native UIKit)" forHTTPHeaderField:@"User-Agent"];
-    NSArray *cookies=self.cookies.allValues;if(cookies.count){NSDictionary *headers=[NSHTTPCookie requestHeaderFieldsWithCookies:cookies];[r setValue:headers[@"Cookie"] forHTTPHeaderField:@"Cookie"];}
+    r.HTTPShouldHandleCookies=NO;[r setValue:nativeUserAgent() forHTTPHeaderField:@"User-Agent"];
+    r=[[self withCookies:r]mutableCopy];
     if(fields){r.HTTPMethod=@"POST";[r setValue:@"application/x-www-form-urlencoded; charset=utf-8" forHTTPHeaderField:@"Content-Type"];[r setValue:@"https://ripple.tel" forHTTPHeaderField:@"Origin"];[r setValue:@"https://ripple.tel/" forHTTPHeaderField:@"Referer"];NSMutableArray *pairs=[NSMutableArray array];for(NSString *key in fields)[pairs addObject:[NSString stringWithFormat:@"%@=%@",[RPClient encode:key],[RPClient encode:fields[key]]]];r.HTTPBody=[[pairs componentsJoinedByString:@"&"] dataUsingEncoding:NSUTF8StringEncoding];}
-    RPRequest *job=[RPRequest new];job.client=self;job.body=[NSMutableData data];
+    RPRequest *job=[RPRequest new];job.client=self;job.sessionGeneration=self.sessionGeneration;job.body=[NSMutableData data];
+    NSUInteger generation=self.sessionGeneration;
     job.completion=^(NSData *data,NSHTTPURLResponse *response,NSError *error){
+        if(generation!=self.sessionGeneration){completion(nil,response,RPError(@"Your sign-in changed. Refresh to continue."));return;}
         if(response)[self receive:response];
         completion(data,response,error);
     };
@@ -39,13 +61,43 @@ static BOOL trusted(NSURL *url) { return [[url scheme] isEqual:@"https"] && [[ur
 }
 - (void)receive:(NSHTTPURLResponse *)response {
     NSUInteger received=0;
-    for(NSHTTPCookie *cookie in [NSHTTPCookie cookiesWithResponseHeaderFields:response.allHeaderFields forURL:response.URL])if([cookie.domain isEqual:@"ripple.tel"]||[cookie.domain isEqual:@".ripple.tel"]){received++;if(cookie.expiresDate&&[cookie.expiresDate timeIntervalSinceNow]<0)[self.cookies removeObjectForKey:cookie.name];else self.cookies[cookie.name]=cookie;}
+    for(NSHTTPCookie *cookie in [NSHTTPCookie cookiesWithResponseHeaderFields:response.allHeaderFields forURL:response.URL])if([cookie.domain isEqual:@"ripple.tel"]||[cookie.domain isEqual:@".ripple.tel"]){received++;if((cookie.properties[NSHTTPCookieMaximumAge]&&[cookie.properties[NSHTTPCookieMaximumAge]longLongValue]<=0)||(cookie.expiresDate&&[cookie.expiresDate timeIntervalSinceNow]<=0))[self.cookies removeObjectForKey:cookieKey(cookie)];else self.cookies[cookieKey(cookie)]=cookie;}
+    if(self.sessionEnabled)[self rememberSession];
     // Counts only: never record cookie values, credentials, bodies or URL queries.
     [self.requestSummary addObject:@{@"path":response.URL.path?:@"",@"status":@(response.statusCode),@"receivedCookieCount":@(received),@"storedCookieCount":@(self.cookies.count)}];if(self.requestSummary.count>12)[self.requestSummary removeObjectAtIndex:0];
 }
 - (NSURLRequest *)withCookies:(NSURLRequest *)request {
     NSMutableURLRequest *r=[request mutableCopy];r.HTTPShouldHandleCookies=NO;
-    NSDictionary *headers=[NSHTTPCookie requestHeaderFieldsWithCookies:self.cookies.allValues];[r setValue:headers[@"Cookie"] forHTTPHeaderField:@"Cookie"];return r;
+    NSMutableArray *matches=[NSMutableArray array];NSString *path=request.URL.path.length?request.URL.path:@"/";
+    for(NSHTTPCookie *cookie in self.cookies.allValues){
+        if(cookie.expiresDate&&[cookie.expiresDate timeIntervalSinceNow]<=0){[self.cookies removeObjectForKey:cookieKey(cookie)];continue;}
+        NSString *scope=cookie.path.length?cookie.path:@"/";BOOL match=[path isEqual:scope]||([path hasPrefix:scope]&&([scope hasSuffix:@"/"]||(path.length>scope.length&&[path characterAtIndex:scope.length]=='/')));
+        if(match&&trusted(request.URL)) [matches addObject:cookie];
+    }
+    [matches sortUsingComparator:^NSComparisonResult(NSHTTPCookie *a,NSHTTPCookie *b){return a.path.length>b.path.length?NSOrderedAscending:a.path.length<b.path.length?NSOrderedDescending:NSOrderedSame;}];
+    NSDictionary *headers=[NSHTTPCookie requestHeaderFieldsWithCookies:matches];[r setValue:headers[@"Cookie"] forHTTPHeaderField:@"Cookie"];return r;
+}
+
+- (void)restoreSavedSession:(NSString *)service{
+ self.sessionService=service;NSError *readError=nil;NSData *data=RPSessionRead(service,&readError);self.sessionError=readError;if(!data)return;
+ NSDictionary *saved=data.length<=256*1024?[NSPropertyListSerialization propertyListWithData:data options:NSPropertyListImmutable format:NULL error:NULL]:nil;
+ if(![saved isKindOfClass:[NSDictionary class]]||[saved[@"version"]integerValue]!=1||![saved[@"account"]isKindOfClass:[NSString class]]||![saved[@"cookies"]isKindOfClass:[NSArray class]]){self.sessionError=RPError(@"Saved sign-in is unreadable. Please sign in again.");return;}
+ for(id properties in saved[@"cookies"]){if(![properties isKindOfClass:[NSDictionary class]])continue;NSHTTPCookie *cookie=[NSHTTPCookie cookieWithProperties:properties];if(cookie&&([cookie.domain isEqual:@"ripple.tel"]||[cookie.domain isEqual:@".ripple.tel"])&&(!cookie.expiresDate||[cookie.expiresDate timeIntervalSinceNow]>0))self.cookies[cookieKey(cookie)]=cookie;}
+ if(self.cookies.count&&[saved[@"account"]length]){self.account=saved[@"account"];self.sessionEnabled=YES;self.lastSessionData=data;}
+}
+- (BOOL)rememberSession{
+ if(!self.sessionService.length||!self.account.length)return YES;
+ self.sessionEnabled=YES;NSMutableArray *cookies=[NSMutableArray array];
+ NSArray *keys=[[self.cookies allKeys]sortedArrayUsingSelector:@selector(compare:)];
+ for(NSString *ident in keys){NSHTTPCookie *cookie=self.cookies[ident];if(cookie.expiresDate&&[cookie.expiresDate timeIntervalSinceNow]<=0)continue;
+  NSMutableDictionary *properties=[NSMutableDictionary dictionary];for(NSString *key in @[NSHTTPCookieName,NSHTTPCookieValue,NSHTTPCookieDomain,NSHTTPCookiePath,NSHTTPCookieVersion,NSHTTPCookieSecure])if(cookie.properties[key])properties[key]=cookie.properties[key];if(cookie.expiresDate)properties[NSHTTPCookieExpires]=cookie.expiresDate;[cookies addObject:properties];
+ }
+ NSData *data=[NSPropertyListSerialization dataWithPropertyList:@{@"version":@1,@"account":self.account,@"cookies":cookies} format:NSPropertyListBinaryFormat_v1_0 options:0 error:NULL];
+ if([data isEqual:self.lastSessionData])return YES;NSError *saveError=nil;BOOL saved=data&&RPSessionWrite(self.sessionService,data,&saveError);self.sessionError=saveError;if(!saved)return NO;self.lastSessionData=data;return YES;
+}
+- (BOOL)clearSession{
+ NSError *deleteError=nil;if(self.sessionService.length&&!RPSessionDelete(self.sessionService,&deleteError)){self.sessionError=deleteError;return NO;}self.sessionError=nil;
+ self.sessionGeneration++;self.sessionEnabled=NO;self.lastSessionData=nil;[self.cookies removeAllObjects];self.account=@"";return YES;
 }
 
 @end
@@ -62,6 +114,7 @@ static NSString *content(xmlNodePtr node){NSMutableString *s=[NSMutableString st
 
 static NSString *prop(xmlNodePtr node,const char *name){xmlChar *p=xmlGetProp(node,(const xmlChar *)name);NSString *s=p?[NSString stringWithUTF8String:(char *)p]:nil;if(p)xmlFree(p);return s;}
 static NSString *first(xmlDocPtr d,xmlNodePtr n,const char *query){NSArray *a=nodes(d,n,query);return a.count?content([a[0] pointerValue]):@"";}
+static NSString *styleURL(NSString *style){NSRange start=[style rangeOfString:@"url("];if(start.location==NSNotFound)return @"";NSString *tail=[style substringFromIndex:NSMaxRange(start)];NSRange end=[tail rangeOfString:@")"];if(end.location==NSNotFound)return @"";return [[tail substringToIndex:end.location]stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" '\"\t"]];}
 static NSString *accountName(xmlDocPtr doc,xmlNodePtr root){
     NSString *account=first(doc,root,"//*[contains(@class,'secondary-nav')]//*[contains(concat(' ',normalize-space(@class),' '),' username ')]");
     if(account.length)return account;
@@ -110,7 +163,7 @@ NSDictionary *RPParse(NSData *data){
     xmlDocPtr doc=htmlReadMemory(data.bytes,(int)data.length,"https://ripple.tel/","UTF-8",HTML_PARSE_RECOVER|HTML_PARSE_NOERROR|HTML_PARSE_NOWARNING|HTML_PARSE_NONET);
     if(!doc)return nil;xmlNodePtr root=xmlDocGetRootElement(doc);
     if(!nodes(doc,root,"//a[contains(concat(' ',normalize-space(@class),' '),' brand ')] | //img[@alt='Ripple']").count){xmlFreeDoc(doc);return nil;}
-    NSMutableArray *posts=[NSMutableArray array];
+    NSMutableArray *posts=[NSMutableArray array];NSMutableArray *profiles=[NSMutableArray array];
     for(NSValue *v in nodes(doc,root,"//div[contains(concat(' ',normalize-space(@class),' '),' userpost ') and starts-with(@id,'post-')]")){
         xmlNodePtr n=v.pointerValue;NSString *pid=[prop(n,"id") substringFromIndex:5];NSString *author=first(doc,n,".//*[contains(concat(' ',normalize-space(@class),' '),' displayname ')]");NSString *handle=first(doc,n,".//*[contains(concat(' ',normalize-space(@class),' '),' username ')]");
         NSMutableArray *paragraphs=[NSMutableArray array];for(NSValue *p in nodes(doc,n,".//p[not(ancestor::*[contains(@class,'hover-card')])]")){NSString *text=content(p.pointerValue);if(text.length)[paragraphs addObject:text];}
@@ -121,6 +174,31 @@ NSDictionary *RPParse(NSData *data){
         NSArray *actions=nodes(doc,n,".//*[contains(@class,'interactions')]//a[@href]");NSMutableDictionary *links=[NSMutableDictionary dictionary];NSMutableArray *counts=[NSMutableArray array];
         for(NSValue *link in actions){xmlNodePtr linkNode=link.pointerValue;NSString *href=prop(linkNode,"href");NSString *count=first(doc,linkNode,".//*[contains(@class,'count')]");if(count.length)[counts addObject:count];if([href rangeOfString:@"like"].location!=NSNotFound)links[@"like"]=href;if([href rangeOfString:@"repost"].location!=NSNotFound)links[@"repost"]=href;}
         [posts addObject:@{@"id":pid?:@"",@"author":author,@"handle":handle,@"text":[paragraphs componentsJoinedByString:@"\n"],@"time":time,@"avatar":avatar?:@"",@"images":images,@"actions":links,@"likes":counts.count?counts[0]:@"0",@"replies":counts.count>1?counts[1]:@"0",@"reposts":counts.count>2?counts[2]:@"0"}];
+        if(!handle.length)continue;NSUInteger profileIndex=NSNotFound;
+        for(NSUInteger pi=0;pi<profiles.count;pi++)if([[[profiles[pi][@"handle"]stringByReplacingOccurrencesOfString:@"@" withString:@""]lowercaseString]isEqual:[[handle stringByReplacingOccurrencesOfString:@"@" withString:@""]lowercaseString]]){profileIndex=pi;break;}
+        if(profileIndex==NSNotFound){NSString *bare=[handle stringByReplacingOccurrencesOfString:@"@" withString:@""];[profiles addObject:@{@"name":author,@"handle":handle,@"avatar":avatar?:@"",@"banner":@"",@"bio":@"",@"stats":@{},@"path":[@"/~" stringByAppendingString:bare]}];profileIndex=profiles.count-1;}
+        NSArray *cards=nodes(doc,n,".//*[contains(concat(' ',normalize-space(@class),' '),' hover-card ')]");
+        if(cards.count){
+            xmlNodePtr card=[cards[0] pointerValue];
+            NSString *cardName=first(doc,card,".//h4/text()[1]");if(!cardName.length)cardName=author;
+            NSString *cardHandle=first(doc,card,".//h4//small");if(!cardHandle.length)cardHandle=handle;
+            NSArray *cardAvatars=nodes(doc,card,".//img[contains(@class,'hover-card-avatar')]");
+            NSString *cardAvatar=cardAvatars.count?prop([cardAvatars[0] pointerValue],"src"):avatar;
+            NSArray *headers=nodes(doc,card,".//*[contains(concat(' ',normalize-space(@class),' '),' hover-card-header ')]");
+            NSString *banner=headers.count?styleURL(prop([headers[0] pointerValue],"style")?:@""): @"";
+            NSString *bio=first(doc,card,".//*[contains(concat(' ',normalize-space(@class),' '),' hover-card-bio ')]");
+            NSMutableDictionary *stats=[NSMutableDictionary dictionary];
+            for(NSValue *sv in nodes(doc,card,".//*[contains(concat(' ',normalize-space(@class),' '),' hover-card-stats ')]//span")){
+                xmlNodePtr sn=sv.pointerValue;NSString *label=[[content(sn) lowercaseString]stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];NSString *number=first(doc,sn,".//strong");
+                if([label rangeOfString:@"follower"].location!=NSNotFound)stats[@"followers"]=number.length?number:@"";
+                else if([label rangeOfString:@"following"].location!=NSNotFound)stats[@"following"]=number.length?number:@"";
+                else if([label rangeOfString:@"post"].location!=NSNotFound)stats[@"posts"]=number.length?number:@"";
+            }
+            NSString *profilePath=[@"/~" stringByAppendingString:[cardHandle stringByReplacingOccurrencesOfString:@"@" withString:@""]];NSArray *cardLinks=nodes(doc,card,".//a[@href]");
+            for(NSValue *lv in cardLinks){NSString *href=prop(lv.pointerValue,"href")?:@"";if([href hasPrefix:@"/~"]||[href hasPrefix:@"~"]){profilePath=[href hasPrefix:@"~"]?[@"/" stringByAppendingString:href]:href;break;}}
+            NSDictionary *record=@{@"name":cardName,@"handle":cardHandle,@"avatar":cardAvatar?:@"",@"banner":banner,@"bio":bio,@"stats":stats,@"path":profilePath};
+            [profiles replaceObjectAtIndex:profileIndex withObject:record];
+        }
 
     }
     NSMutableDictionary *forms=[NSMutableDictionary dictionary];
@@ -139,5 +217,5 @@ NSDictionary *RPParse(NSData *data){
     }
     NSString *account=accountName(doc,root);
     BOOL older=nodes(doc,root,"//a[contains(.,'Older') and contains(@href,'pageno=')] | //li[contains(concat(' ',normalize-space(@class),' '),' next ') and not(contains(@class,'disabled'))]/a[contains(@href,'pageno=')]").count>0;
-    NSDictionary *result=@{@"posts":posts,@"people":people,@"forms":forms,@"account":account,@"older":@(older)};xmlFreeDoc(doc);return result;
+    NSDictionary *result=@{@"posts":posts,@"people":people,@"profiles":profiles,@"forms":forms,@"account":account,@"older":@(older)};xmlFreeDoc(doc);return result;
 }
