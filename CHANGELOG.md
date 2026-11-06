@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.9 — 2026-11-06
+
+- Keep the **Post** control visible on the narrow Timeline navigation bar.
+- Move feed refresh to pull-to-refresh.
+
 ## 0.1.8 — 2026-11-06
 
 - Label the timeline composer control **Post** so it is easy to find.
