@@ -6,7 +6,7 @@
 static NSError *RPError(NSString *text) { return [NSError errorWithDomain:@"Ripple" code:1 userInfo:@{NSLocalizedDescriptionKey:text}]; }
 static NSString *cookieKey(NSHTTPCookie *cookie){return [NSString stringWithFormat:@"%@|%@|%@",cookie.domain,cookie.path,cookie.name];}
 static BOOL trusted(NSURL *url) { return [[url.scheme lowercaseString] isEqual:@"https"] && [[url.host lowercaseString] isEqual:@"ripple.tel"] && (!url.port || url.port.integerValue==443) && !url.user && !url.password; }
-static NSString *nativeUserAgent(void){static NSString *value;static dispatch_once_t once;dispatch_once(&once,^{NSString *version=[[NSProcessInfo processInfo] operatingSystemVersionString]?:@"unknown";version=[[version componentsSeparatedByCharactersInSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789."] invertedSet]] componentsJoinedByString:@""];value=[NSString stringWithFormat:@"RippleNative-iOS/0.1.6 (iPhone; iOS %@; armv7)",version.length?version:@"unknown"];});return value;}
+static NSString *nativeUserAgent(void){static NSString *value;static dispatch_once_t once;dispatch_once(&once,^{NSString *version=[[NSProcessInfo processInfo] operatingSystemVersionString]?:@"unknown";version=[[version componentsSeparatedByCharactersInSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789."] invertedSet]] componentsJoinedByString:@""];value=[NSString stringWithFormat:@"RippleNative-iOS/0.1.7 (iPhone; iOS %@; armv7)",version.length?version:@"unknown"];});return value;}
 @interface RPClient (Cookies)
 - (void)receive:(NSHTTPURLResponse *)response;
 - (NSURLRequest *)withCookies:(NSURLRequest *)request;

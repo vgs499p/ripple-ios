@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7 — 2026-11-06
+
+- Fix Notifications being routed to an empty profile view when its URL includes
+  the `tlmode=mentions` query.
+- Fix accent selection by matching the chosen palette label instead of the
+  action-sheet button index.
+
 ## 0.1.6 — 2026-11-06
 
 - Add persisted accent choices: Ripple Red, Breeze Orange, Leaf Green, Rose Pink,
