@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8 — 2026-11-06
+
+- Label the timeline composer control **Post** so it is easy to find.
+
 ## 0.1.7 — 2026-11-06
 
 - Fix Notifications being routed to an empty profile view when its URL includes

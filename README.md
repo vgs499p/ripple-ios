@@ -4,7 +4,7 @@ An unofficial native client for [Ripple](https://ripple.tel/), built with UIKit
 for jailbroken iOS devices. It connects directly to Ripple over HTTPS, without
 an intermediary server or a public API.
 
-**Development build 0.1.7** — tested on an iPhone 5 running iOS 6.1.4. This is a
+**Development build 0.1.8** — tested on an iPhone 5 running iOS 6.1.4. This is a
 32-bit armv7 app and requires iOS 6–10 with 32-bit app support. Other devices and
 OS versions have not been verified.
 
@@ -43,7 +43,7 @@ still expire or revoke a session; the client does not bypass server expiry. Fail
 markers, never passwords or cookie values. Development screenshots are enabled
 only by the optional `RIPPLE_DEVICE_TEST` compile flag.
 
-Requests identify this client as `RippleNative-iOS/0.1.7 (iPhone; iOS <runtime-version>; armv7)`.
+Requests identify this client as `RippleNative-iOS/0.1.8 (iPhone; iOS <runtime-version>; armv7)`.
 The version is read from iOS at runtime. The Ripple server controls how that
 value is labeled in its Sessions page; older sessions keep the user-agent value
 recorded when they were created.
