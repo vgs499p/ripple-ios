@@ -1,3 +1,7 @@
+# 0.1.10
+
+- Refresh like/repost counts from the current feed and page, show pending requests, and highlight confirmed count changes without resetting scroll position.
+
 # Changelog
 
 ## 0.1.9 — 2026-11-06

@@ -23,6 +23,7 @@ void RPEvent(NSString *);
 @property(nonatomic,strong) UILabel *profileBio;
 @property(nonatomic,strong) UILabel *profileStats;
 @property(nonatomic,copy) NSString *selectedID;
+@property(nonatomic,strong) NSMutableSet *pendingActions;
 @property(nonatomic,strong) UILabel *status;
 @property(nonatomic,strong) UIButton *older;
 @property(nonatomic,strong) UIButton *newer;

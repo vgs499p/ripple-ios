@@ -128,7 +128,23 @@
  if(!RPSharedClient().account.length){[self.navigationController pushViewController:[RPLogin new] animated:YES];return;}
  if([action isEqual:@"reply"]){RPCompose *c=[RPCompose new];c.route=[@"/status/" stringByAppendingString:post[@"id"]];[self.navigationController pushViewController:c animated:YES];return;}
  NSString *url=post[@"actions"][action];if(!url.length){RPMessage(@"Action unavailable",@"Ripple did not provide this action link. Refresh this page.");return;}
- [RPSharedClient() get:url completion:^(NSData *data,NSHTTPURLResponse *response,NSError *error){if(error){RPMessage(@"Could not confirm action",error.localizedDescription);return;}NSString *route=[@"/status/" stringByAppendingString:post[@"id"]];[RPSharedClient() get:route completion:^(NSData *d,NSHTTPURLResponse *r,NSError *failure){NSDictionary *fresh=RPParse(d);for(NSDictionary *update in fresh[@"posts"])if([update[@"id"] isEqual:post[@"id"]]){NSUInteger index=[self.posts indexOfObject:post];if(index==NSNotFound)break;NSMutableDictionary *merged=[post mutableCopy];for(NSString *key in @[@"likes",@"reposts",@"actions"])merged[key]=update[key];self.posts[index]=merged;CGPoint offset=self.tableView.contentOffset;[self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:index inSection:0]] withRowAnimation:UITableViewRowAnimationNone];[self.tableView setContentOffset:offset animated:NO];break;}if(failure)RPMessage(@"Action sent",@"Refresh to check the count before retrying.");}];}];
+ if(!self.pendingActions)self.pendingActions=[NSMutableSet set];NSString *key=[NSString stringWithFormat:@"%@:%@",post[@"id"],action];if([self.pendingActions containsObject:key])return;[self.pendingActions addObject:key];[self.tableView reloadData];
+ NSString *feedRoute=[self.route copy];NSInteger pageNumber=self.number;
+ [RPSharedClient() get:url completion:^(NSData *data,NSHTTPURLResponse *response,NSError *error){
+  if(error){[self.pendingActions removeObject:key];[self.tableView reloadData];RPMessage(@"Check Ripple before retrying",error.localizedDescription);return;}
+  // Refresh the same feed/page that supplied the action. A thread response can
+  // omit the matching row or use different counts. Never resend the mutation.
+  NSString *path=pageNumber>1?[feedRoute stringByAppendingFormat:@"%cpageno=%ld",[feedRoute rangeOfString:@"?"].location==NSNotFound?'?':'&',(long)pageNumber]:feedRoute;
+  [RPSharedClient() get:path completion:^(NSData *d,NSHTTPURLResponse *r,NSError *failure){
+   [self.pendingActions removeObject:key];NSDictionary *fresh=RPParse(d);NSDictionary *update=nil;
+   for(NSDictionary *candidate in fresh[@"posts"])if([candidate[@"id"]isEqual:post[@"id"]]){update=candidate;break;}
+   if(!update)for(NSDictionary *candidate in RPParse(data)[@"posts"])if([candidate[@"id"]isEqual:post[@"id"]]){update=candidate;break;}
+   CGPoint offset=self.tableView.contentOffset;
+   if(update){for(NSUInteger i=0;i<self.posts.count;i++){NSDictionary *old=self.posts[i];if(![old[@"id"]isEqual:post[@"id"]])continue;NSMutableDictionary *merged=[old mutableCopy];for(NSString *field in @[@"likes",@"reposts",@"actions"])if(update[field])merged[field]=update[field];NSString *countKey=[action isEqual:@"like"]?@"likes":@"reposts";NSInteger before=[post[countKey]integerValue],after=[update[countKey]integerValue];if(after!=before)merged[[action stringByAppendingString:@"Selected"]]=@(after>before);self.posts[i]=merged;}}
+   [self.tableView reloadData];[self.tableView setContentOffset:offset animated:NO];
+   if(!update)RPMessage(@"Action sent",failure.localizedDescription?:@"The updated count could not be read. Pull down to refresh before trying again.");
+  }];
+ }];
 }
 - (void)actionSheet:(UIActionSheet *)sheet clickedButtonAtIndex:(NSInteger)button{
  if(button==sheet.cancelButtonIndex)return;NSDictionary *post=nil;for(NSDictionary *p in self.posts)if([p[@"id"] isEqual:self.selectedID])post=p;if(!post)return;
