@@ -6,7 +6,7 @@
 static NSError *RPError(NSString *text) { return [NSError errorWithDomain:@"Ripple" code:1 userInfo:@{NSLocalizedDescriptionKey:text}]; }
 static NSString *cookieKey(NSHTTPCookie *cookie){return [NSString stringWithFormat:@"%@|%@|%@",cookie.domain,cookie.path,cookie.name];}
 static BOOL trusted(NSURL *url) { return [[url.scheme lowercaseString] isEqual:@"https"] && [[url.host lowercaseString] isEqual:@"ripple.tel"] && (!url.port || url.port.integerValue==443) && !url.user && !url.password; }
-static NSString *nativeUserAgent(void){static NSString *value;static dispatch_once_t once;dispatch_once(&once,^{NSString *version=[[NSProcessInfo processInfo] operatingSystemVersionString]?:@"unknown";version=[[version componentsSeparatedByCharactersInSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789."] invertedSet]] componentsJoinedByString:@""];value=[NSString stringWithFormat:@"RippleNative-iOS/0.1.10 (iPhone; iOS %@; armv7)",version.length?version:@"unknown"];});return value;}
+static NSString *nativeUserAgent(void){static NSString *value;static dispatch_once_t once;dispatch_once(&once,^{NSString *version=[[NSProcessInfo processInfo] operatingSystemVersionString]?:@"unknown";version=[[version componentsSeparatedByCharactersInSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789."] invertedSet]] componentsJoinedByString:@""];value=[NSString stringWithFormat:@"RippleNative-iOS/0.1.11 (iPhone; iOS %@; armv7)",version.length?version:@"unknown"];});return value;}
 @interface RPClient (Cookies)
 - (void)receive:(NSHTTPURLResponse *)response;
 - (NSURLRequest *)withCookies:(NSURLRequest *)request;
@@ -217,5 +217,10 @@ NSDictionary *RPParse(NSData *data){
     }
     NSString *account=accountName(doc,root);
     BOOL older=nodes(doc,root,"//a[contains(.,'Older') and contains(@href,'pageno=')] | //li[contains(concat(' ',normalize-space(@class),' '),' next ') and not(contains(@class,'disabled'))]/a[contains(@href,'pageno=')]").count>0;
+    for(NSValue *v in nodes(doc,root,"//p[contains(concat(' ',normalize-space(@class),' '),' text-muted ')]/span[starts-with(normalize-space(.),'via Ripple ')]")){
+        xmlNodePtr sourceNode=v.pointerValue;NSArray *previous=nodes(doc,sourceNode,"preceding::div[contains(concat(' ',normalize-space(@class),' '),' userpost ') and starts-with(@id,'post-')][1]");
+        if(!previous.count)continue;NSString *pid=[prop([previous[0]pointerValue],"id")substringFromIndex:5];NSString *source=content(sourceNode);
+        for(NSUInteger i=0;i<posts.count;i++)if([posts[i][@"id"]isEqual:pid]){NSMutableDictionary *post=[posts[i]mutableCopy];post[@"source"]=source;posts[i]=post;break;}
+    }
     NSDictionary *result=@{@"posts":posts,@"people":people,@"profiles":profiles,@"forms":forms,@"account":account,@"older":@(older)};xmlFreeDoc(doc);return result;
 }

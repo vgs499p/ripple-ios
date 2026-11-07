@@ -1,3 +1,7 @@
+# 0.1.11
+
+- Show Ripple’s recorded “via Ripple for …” label beneath detailed posts, without including it in the post text.
+
 # 0.1.10
 
 - Refresh like/repost counts from the current feed and page, show pending requests, and highlight confirmed count changes without resetting scroll position.

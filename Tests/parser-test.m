@@ -20,5 +20,7 @@ int main(int argc,char **argv){@autoreleasepool{
  for(NSString *action in @[@"https://example.com/login",@"http://ripple.tel/login",@"//example.com/login"]){NSString *unsafe=[standalone stringByReplacingOccurrencesOfString:@"action=''" withString:[NSString stringWithFormat:@"action='%@'",action]];NSCAssert(!RPParseLoginForm([unsafe dataUsingEncoding:NSUTF8StringEncoding],loginURL),@"credentials never target another origin");}
  NSCAssert(!RPParseLoginForm([@"<form method='post' action='/login'><input name='username'></form>" dataUsingEncoding:NSUTF8StringEncoding],loginURL),@"reject incomplete form");
  if(argc>2){NSDictionary *captured=RPParseLoginForm([NSData dataWithContentsOfFile:[NSString stringWithUTF8String:argv[2]]],loginURL);NSCAssert([captured[@"action"] isEqual:loginURL.absoluteString]&&[captured[@"hidden"][@"submit"] isEqual:@"Login"],@"actual standalone login markup");}
+ NSDictionary *sourcePage=RPParse([@"<a class='brand'></a><div class='userpost' id='post-91'><span class='username'>@alice</span><p>Body</p></div><p class='text-muted'>Today <span>via Ripple for iOS (legacy)</span></p><div class='userpost' id='post-92'><span class='username'>@bob</span><p>Reply</p></div>" dataUsingEncoding:NSUTF8StringEncoding]);
+ NSCAssert([sourcePage[@"posts"][0][@"source"]isEqual:@"via Ripple for iOS (legacy)"]&&!sourcePage[@"posts"][1][@"source"],@"source belongs to original post, not replies");
  puts("PASS legacy parser and form encoding");return 0;
 }}

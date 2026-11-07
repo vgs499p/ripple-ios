@@ -8,6 +8,7 @@
 @property(nonatomic,strong) UILabel *name;
 @property(nonatomic,strong) UILabel *time;
 @property(nonatomic,strong) UILabel *body;
+@property(nonatomic,strong) UILabel *sourceLabel;
 @property(nonatomic,strong) UIButton *photo;
 @property(nonatomic,strong) UIButton *profileButton;
 @property(nonatomic,strong) NSArray *actions;
