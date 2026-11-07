@@ -53,7 +53,7 @@ recorded when they were created.
 Use macOS with Apple clang, `ldid`, and your own licensed armv7-capable iPhoneOS
 SDK. The tested SDK is iPhoneOS 6.1. The SDK and Apple frameworks are not included.
 The iOS compatibility client is Objective-C; the desktop Rust client is maintained
-separately in [ripple-mac](https://github.com/vgs499p/ripple-mac).
+separately in [ripple-mac](https://github.com/vgs499p/ripple-desktop).
 
 ```sh
 IOS_SDK=/absolute/path/to/iPhoneOS6.1.sdk sh build.sh
